@@ -31,7 +31,7 @@ def main(page: ft.Page):
     img = qr.make_image(fill_color=current_color, back_color='white')
 
     buffered = BytesIO()
-    img.save(buffered, format='PNG')
+    img.save(buffered)
     img_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
 
     qr_image.src = f'data:image/png;base64,{img_base64}'
@@ -181,5 +181,8 @@ def main(page: ft.Page):
   # 起動直後のサイズ合わせ
   resize_qr(None)
 
-
-ft.app(target=main, view=ft.WEB_BROWSER)
+if __name__ == "__main__":
+    # Webアプリとしてポート指定で起動（Renderの環境変数に対応）
+    import os
+    port = int(os.getenv("PORT", 8000))
+    t.app(target=main, host="0.0.0.0", view=ft.AppView.WEB_BROWSER, port=port)
