@@ -1,81 +1,185 @@
 import base64
-import urllib.parse
-import urllib.request
+from io import BytesIO
 import flet as ft
+import qrcode
 
 
 def main(page: ft.Page):
-    # ページ基本設定
-    page.title = "QRコード生成アプリ"
-    page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
-    page.vertical_alignment = ft.MainAxisAlignment.CENTER
-    page.padding = 20
+  page.title = 'QRコード生成アプリ'
+  page.vertical_alignment = ft.MainAxisAlignment.CENTER
+  page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
+  page.theme_mode = ft.ThemeMode.LIGHT
 
-    # UIコンポーネント定義
-    text_input = ft.TextField(
-        label="QRコードにするテキストやURLを入力",
-        width=400,
-        hint_text="https://example.com",
-    )
+  # 現在選択されている色を保持する変数（初期値は黒）
+  current_color = '#000000'
 
-    # 最初は非表示にしておく画像コントロール
-    qr_image = ft.Image(visible=False, width=250, height=250)
-
-    # エラーメッセージ用テキスト
-    status_text = ft.Text(value="", color=ft.Colors.RED_500)
-
-    # ボタンクリック時の処理
-    def generate_qr(e):
-        # 未入力チェック
-        if not text_input.value:
-            status_text.value = "テキストを入力してください！"
-            page.update()
-            return
-
-        status_text.value = ""
-
-        try:
-            # 入力されたテキストをURLエンコード
-            encoded_text = urllib.parse.quote(text_input.value)
-            # 無料のQRコード生成APIのURLを構築
-            api_url = f"https://qrserver.com{encoded_text}"
-
-            # APIからQRコード画像をダウンロード（メモリ上で処理）
-            with urllib.request.urlopen(api_url) as response:
-                img_data = response.read()
-
-            # Fletで表示するためにBase64文字列へエンコード
-            qr_image.src_base64 = base64.b64encode(img_data).decode("utf-8")
-            qr_image.visible = True
-
-        except Exception as ex:
-            status_text.value = f"エラーが発生しました: {str(ex)}"
-            qr_image.visible = False
-
-        # 画面を更新して再描画
+  # QRコード生成処理
+  def generate_qr(e=None):
+    data = url_input.value.strip()
+    if not data:
+      qr_image.src = ''
+      if page.controls:
         page.update()
+      return
 
-    # QRコード生成ボタン
-    submit_btn = ft.ElevatedButton(
-        text="QRコードを生成",
-        icon=ft.Icons.QR_CODE,
-        on_click=generate_qr
-    )
+    # qrcodeの生成設定
+    qr = qrcode.QRCode(version=1, box_size=10, border=4)
+    qr.add_data(data)
+    qr.make(fit=True)
 
-    # 画面にすべてのコントロールを配置
-    page.add(
-        ft.Text("QR Code Generator", size=24, weight=ft.FontWeight.BOLD),
-        text_input,
-        submit_btn,
-        status_text,
-        ft.Divider(height=20, color=ft.Colors.TRANSPARENT),
-        qr_image,
-    )
+    # 16進数カラーコードで画像を生成
+    img = qr.make_image(fill_color=current_color, back_color='white')
+
+    buffered = BytesIO()
+    img.save(buffered, format='PNG')
+    img_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
+
+    qr_image.src = f'data:image/png;base64,{img_base64}'
+    if page.controls:
+      page.update()
+
+  # ●ボタンやパレット内の色をクリックしたとき
+  def on_color_click(e):
+    nonlocal current_color
+    current_color = e.control.data  # 16進数コードを取得
+    generate_qr()
+    page.close(color_dialog)  # ★ダイアログを閉じる
+    page.update()
+
+  # パレット用の16進数カラーコード（20色）
+  palette_colors = [
+      '#9C27B0',
+      '#673AB7',
+      '#3F51B5',
+      '#00BCD4',
+      '#009688',
+      '#4CAF50',
+      '#8BC34A',
+      '#CDDC39',
+      '#FFEB3B',
+      '#FFC107',
+      '#FF9800',
+      '#FF5722',
+      '#E91E63',
+      '#795548',
+      '#9E9E9E',
+      '#607D8B',
+      '#1A237E',
+      '#004D40',
+      '#3E2723',
+      '#212121',
+  ]
+
+  # カラーパレットのグリッドUIを作成
+  palette_grid = ft.GridView(
+      expand=1,
+      runs_count=5,  # 1行に5個
+      max_extent=50,
+      child_aspect_ratio=1.0,
+      spacing=10,
+      run_spacing=10,
+      controls=[
+          ft.IconButton(
+              icon=ft.Icons.CIRCLE,
+              icon_color=color,
+              data=color,
+              on_click=on_color_click,
+              icon_size=30,
+          )
+          for color in palette_colors
+      ],
+  )
+
+  # カラーパレットを表示するダイアログ窓
+  color_dialog = ft.AlertDialog(
+      title=ft.Text('その他の色を選択'),
+      content=ft.Container(content=palette_grid, width=280, height=220),
+  )
+
+  # ★重要：あらかじめoverlayに登録しておく
+  page.overlay.append(color_dialog)
+
+  # パレットを開くボタンの処理
+  def open_color_picker(e):
+    page.open(color_dialog)  # ★ダイアログを開く
+    page.update()
+
+  # UIコンポーネントの定義
+  url_input = ft.TextField(
+      label='URLや文字列を入力',
+      value='https://google.com',
+      width=400,
+      autofocus=True,
+      on_change=generate_qr,
+  )
+
+  qr_image = ft.Image(width=300, height=300, fit=ft.ImageFit.CONTAIN)
+
+  # 横並びのカラーセレクター（●ボタン + パレットアイコン）
+  color_selector = ft.Row(
+      controls=[
+          ft.Text('色:', weight=ft.FontWeight.BOLD),
+          # 黒 ●
+          ft.IconButton(
+              icon=ft.Icons.CIRCLE,
+              icon_color='#000000',
+              data='#000000',
+              on_click=on_color_click,
+          ),
+          # 赤 ●
+          ft.IconButton(
+              icon=ft.Icons.CIRCLE,
+              icon_color='#FF0000',
+              data='#FF0000',
+              on_click=on_color_click,
+          ),
+          # 青 ●
+          ft.IconButton(
+              icon=ft.Icons.CIRCLE,
+              icon_color='#0000FF',
+              data='#0000FF',
+              on_click=on_color_click,
+          ),
+          # 緑 ●
+          ft.IconButton(
+              icon=ft.Icons.CIRCLE,
+              icon_color='#008000',
+              data='#008000',
+              on_click=on_color_click,
+          ),
+          # その他の色（カラーパレットを開くボタン）
+          ft.IconButton(
+              icon=ft.Icons.PALETTE,
+              tooltip='その他の色を選択',
+              on_click=open_color_picker,
+          ),
+      ],
+      alignment=ft.MainAxisAlignment.CENTER,
+  )
+
+  # 画面サイズに合わせてQRコードのサイズを再計算
+  def resize_qr(e):
+    calculated_size = page.width * 0.4
+    final_size = max(200, min(500, calculated_size))
+    qr_image.width = final_size
+    qr_image.height = final_size
+    page.update()
+
+  page.on_resize = resize_qr
+
+  # 初期起動時のQRコード生成
+  generate_qr()
+
+  # 画面の配置
+  page.add(
+      ft.Text('QRコード ジェネレーター', size=24, weight=ft.FontWeight.BOLD),
+      url_input,
+      color_selector,
+      ft.Container(content=qr_image, padding=20),
+  )
+
+  # 起動直後のサイズ合わせ
+  resize_qr(None)
 
 
-if __name__ == "__main__":
-    # Webアプリとしてポート指定で起動（Renderの環境変数に対応）
-    import os
-    port = int(os.getenv("PORT", 8000))
-    ft.app(target=main, view=ft.AppView.WEB_BROWSER, port=port)
-    #ft.app(target=main, host="0.0.0.0", view=ft.AppView.WEB_BROWSER, port=port)
+ft.app(target=main, view=ft.WEB_BROWSER)
