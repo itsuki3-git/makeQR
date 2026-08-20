@@ -185,4 +185,4 @@ if __name__ == "__main__":
     # Webアプリとしてポート指定で起動（Renderの環境変数に対応）
     import os
     port = int(os.getenv("PORT", 8000))
-    t.app(target=main, host="0.0.0.0", view=ft.AppView.WEB_BROWSER, port=port)
+    ft.app(target=main, host="0.0.0.0", view=ft.AppView.WEB_BROWSER, port=port)
